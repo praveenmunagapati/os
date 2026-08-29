@@ -22,8 +22,10 @@ global isr0
 global isr1
 global irq0
 global irq1
+global irq12
 global isr_stub
 extern keyboard_handler
+extern mouse_handler
 
 load_idt:
     lidt [rdi]
@@ -54,20 +56,7 @@ isr1:
     sti
     iretq
 
-; IRQ0: Timer
 irq0:
-    cli
-    push rax
-    ; Send EOI to master PIC
-    mov al, 0x20
-    out 0x20, al
-    pop rax
-    sti
-    iretq
-
-; IRQ1: Keyboard
-irq1:
-    cli
     push rax
     push rcx
     push rdx
@@ -75,9 +64,11 @@ irq1:
     push r9
     push r10
     push r11
-    
-    call keyboard_handler
-    
+
+    ; Send EOI to PIC (Acknowledge interrupt)
+    mov al, 0x20
+    out 0x20, al
+
     pop r11
     pop r10
     pop r9
@@ -85,5 +76,44 @@ irq1:
     pop rdx
     pop rcx
     pop rax
-    sti
+    iretq
+
+irq1:
+    push rax
+    push rcx
+    push rdx
+    push r8
+    push r9
+    push r10
+    push r11
+
+    call keyboard_handler
+
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdx
+    pop rcx
+    pop rax
+    iretq
+
+irq12:
+    push rax
+    push rcx
+    push rdx
+    push r8
+    push r9
+    push r10
+    push r11
+
+    call mouse_handler
+
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdx
+    pop rcx
+    pop rax
     iretq

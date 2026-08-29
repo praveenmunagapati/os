@@ -39,10 +39,12 @@ echo [2/4] Compiling C source files...
 "%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\drivers\keyboard.c" -o "%KEYBOARD_OBJ%"
 "%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\drivers\pci.c" -o "%PCI_OBJ%"
 "%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\kernel\pmm.c" -o "%~dp0build\pmm.o"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\kernel\gui.c" -o "%~dp0build\gui.o"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\drivers\mouse.c" -o "%~dp0build\mouse.o"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo [3/4] Linking...
-"%LLD%" -m elf_x86_64 -T "%~dp0src\arch\x86_64\linker.ld" -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%" "%IDT_OBJ%" "%KEYBOARD_OBJ%" "%PCI_OBJ%" "%~dp0build\pmm.o"
+"%LLD%" -m elf_x86_64 -T "%~dp0src\arch\x86_64\linker.ld" -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%" "%IDT_OBJ%" "%KEYBOARD_OBJ%" "%PCI_OBJ%" "%~dp0build\pmm.o" "%~dp0build\gui.o" "%~dp0build\mouse.o"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo Build successful: %KERNEL_ELF%

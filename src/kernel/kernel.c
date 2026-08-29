@@ -3,7 +3,9 @@
 #include "idt.h"
 #include "serial.h"
 #include "limine.h"
-#include "font.h" /* font8x8_basic array */
+#include "limine.h"
+#include "gui.h"
+#include "mouse.h"
 
 /* Request a framebuffer from Limine */
 __attribute__((used, section(".requests")))
@@ -12,48 +14,38 @@ static volatile struct limine_framebuffer_request framebuffer_request = {
     .revision = 0
 };
 
-static struct limine_framebuffer *fb = NULL;
+struct limine_framebuffer *fb = NULL;
 
-static size_t term_x = 0;
-static size_t term_y = 0;
+/* Window Bounds */
+#define WIN_X 50
+#define WIN_Y 50
+#define WIN_W 800
+#define WIN_H 500
+#define WIN_INNER_X (WIN_X + 4)
+#define WIN_INNER_Y (WIN_Y + 28)
+#define WIN_INNER_W (WIN_W - 8)
+#define WIN_INNER_H (WIN_H - 32)
+
+static size_t term_x = WIN_INNER_X;
+static size_t term_y = WIN_INNER_Y;
 static uint32_t term_color = 0xFFFFFFFF; // White
 
-static void draw_pixel(size_t x, size_t y, uint32_t color) {
-    if (!fb || x >= fb->width || y >= fb->height) return;
-    uint32_t *fb_ptr = fb->address;
-    fb_ptr[y * (fb->pitch / 4) + x] = color;
-}
-
-static void draw_char(char c, size_t x, size_t y, uint32_t fg, uint32_t bg) {
-    if (c < 0 || c > 127) c = '?';
-    char *bitmap = font8x8_basic[(int)c];
-    for (int r = 0; r < 8; r++) {
-        for (int c_bit = 0; c_bit < 8; c_bit++) {
-            if ((bitmap[r] >> c_bit) & 1) {
-                draw_pixel(x + c_bit, y + r, fg);
-            } else {
-                draw_pixel(x + c_bit, y + r, bg);
-            }
-        }
-    }
-}
-
-/* Scroll the framebuffer up by 8 pixels */
+/* Scroll the terminal window up by 8 pixels */
 static void scroll(void) {
     if (!fb) return;
     uint32_t *fb_ptr = fb->address;
     size_t pitch = fb->pitch / 4;
     
-    /* Move pixels up by 8 rows */
-    for (size_t y = 8; y < fb->height; y++) {
-        for (size_t x = 0; x < fb->width; x++) {
+    /* Move pixels up by 8 rows inside the window */
+    for (size_t y = WIN_INNER_Y + 8; y < WIN_INNER_Y + WIN_INNER_H; y++) {
+        for (size_t x = WIN_INNER_X; x < WIN_INNER_X + WIN_INNER_W; x++) {
             fb_ptr[(y - 8) * pitch + x] = fb_ptr[y * pitch + x];
         }
     }
     /* Clear the last 8 rows */
-    for (size_t y = fb->height - 8; y < fb->height; y++) {
-        for (size_t x = 0; x < fb->width; x++) {
-            fb_ptr[y * pitch + x] = 0x00000000;
+    for (size_t y = WIN_INNER_Y + WIN_INNER_H - 8; y < WIN_INNER_Y + WIN_INNER_H; y++) {
+        for (size_t x = WIN_INNER_X; x < WIN_INNER_X + WIN_INNER_W; x++) {
+            fb_ptr[y * pitch + x] = 0xFF121212; // Window Background Color
         }
     }
     term_y -= 8;
@@ -63,29 +55,29 @@ void term_putchar(char c) {
     if (!fb) return;
     
     if (c == '\b') {
-        if (term_x >= 8) {
+        if (term_x >= WIN_INNER_X + 8) {
             term_x -= 8;
-        } else if (term_y >= 8) {
+        } else if (term_y >= WIN_INNER_Y + 8) {
             term_y -= 8;
-            term_x = (fb->width / 8) * 8 - 8;
+            term_x = WIN_INNER_X + ((WIN_INNER_W / 8) * 8) - 8;
         }
-        draw_char(' ', term_x, term_y, 0, 0);
+        gui_draw_char(' ', term_x, term_y, 0, 0xFF121212);
         return;
     }
     
     if (c == '\n') {
-        term_x = 0;
+        term_x = WIN_INNER_X;
         term_y += 8;
     } else {
-        draw_char(c, term_x, term_y, term_color, 0x00000000);
+        gui_draw_char(c, term_x, term_y, term_color, 0xFF121212);
         term_x += 8;
-        if (term_x >= fb->width) {
-            term_x = 0;
+        if (term_x + 8 > WIN_INNER_X + WIN_INNER_W) {
+            term_x = WIN_INNER_X;
             term_y += 8;
         }
     }
     
-    if (term_y >= fb->height) {
+    if (term_y + 8 > WIN_INNER_Y + WIN_INNER_H) {
         scroll();
     }
 }
@@ -123,13 +115,9 @@ int strcmp(const char *s1, const char *s2) {
 
 static void term_clear(void) {
     if (!fb) return;
-    for (size_t y = 0; y < fb->height; y++) {
-        for (size_t x = 0; x < fb->width; x++) {
-            draw_pixel(x, y, 0x00000000);
-        }
-    }
-    term_x = 0;
-    term_y = 0;
+    gui_draw_rect(WIN_INNER_X, WIN_INNER_Y, WIN_INNER_W, WIN_INNER_H, 0xFF121212);
+    term_x = WIN_INNER_X;
+    term_y = WIN_INNER_Y;
 }
 
 static void print_num(uint64_t val) {
@@ -157,6 +145,12 @@ void kmain(void) {
     }
     
     fb = framebuffer_request.response->framebuffers[0];
+    
+    /* Draw the full GUI Desktop */
+    gui_draw_desktop();
+    
+    /* Draw the Terminal Window */
+    gui_draw_window("Terminal - root@MyOS", WIN_X, WIN_Y, WIN_W, WIN_H);
     term_clear();
     
     term_color = 0xFF00FF00;
@@ -164,7 +158,10 @@ void kmain(void) {
 
     /* Initialize Memory */
     pmm_init();
-
+    
+    /* Initialize Mouse */
+    mouse_init();
+    
     term_puts("==================================================================\n");
     term_puts("                   Welcome to MyOS x86_64 Kernel!                 \n");
     term_puts("==================================================================\n\n");

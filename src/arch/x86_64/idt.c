@@ -21,6 +21,7 @@ extern void isr0();
 extern void isr1();
 extern void irq0(); /* Timer */
 extern void irq1(); /* Keyboard */
+extern void irq12(); /* Mouse */
 extern void isr_stub(); /* Default handler */
 
 void set_idt_gate(int n, uint64_t handler) {
@@ -54,9 +55,9 @@ static void pic_remap(void) {
     outb(PIC2_DATA, ICW4_8086);
     io_wait();
     
-    /* Unmask IRQ0 (Timer) and IRQ1 (Keyboard). Mask everything else. */
-    outb(PIC1_DATA, 0xFC); 
-    outb(PIC2_DATA, 0xFF);
+    /* Unmask IRQ0 (Timer), IRQ1 (Keyboard), and IRQ12 (Mouse). Mask everything else. */
+    outb(PIC1_DATA, 0xFB); 
+    outb(PIC2_DATA, 0xEF);
 }
 
 void init_idt(void) {
@@ -75,6 +76,7 @@ void init_idt(void) {
     set_idt_gate(1, (uint64_t)isr1); /* Debug */
     set_idt_gate(32, (uint64_t)irq0); /* IRQ0: Timer */
     set_idt_gate(33, (uint64_t)irq1); /* IRQ1: Keyboard */
+    set_idt_gate(44, (uint64_t)irq12); /* IRQ12: Mouse */
     
     load_idt((uint64_t)&idt_ptr);
 }
