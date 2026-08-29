@@ -25,7 +25,7 @@ extern void isr_stub(); /* Default handler */
 
 void set_idt_gate(int n, uint64_t handler) {
     idt[n].offset_low = handler & 0xFFFF;
-    idt[n].selector = 0x08; /* Kernel code segment */
+    idt[n].selector = 0x28; /* Limine Kernel Code Segment */
     idt[n].ist = 0;
     idt[n].type_attr = 0x8E; /* Interrupt Gate */
     idt[n].offset_mid = (handler >> 16) & 0xFFFF;
@@ -34,11 +34,6 @@ void set_idt_gate(int n, uint64_t handler) {
 }
 
 static void pic_remap(void) {
-    unsigned char a1, a2;
-    
-    a1 = inb(PIC1_DATA);
-    a2 = inb(PIC2_DATA);
-    
     outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
     io_wait();
     outb(PIC2_COMMAND, ICW1_INIT | ICW1_ICW4);
@@ -59,8 +54,9 @@ static void pic_remap(void) {
     outb(PIC2_DATA, ICW4_8086);
     io_wait();
     
-    outb(PIC1_DATA, a1);
-    outb(PIC2_DATA, a2);
+    /* Unmask IRQ0 (Timer) and IRQ1 (Keyboard). Mask everything else. */
+    outb(PIC1_DATA, 0xFC); 
+    outb(PIC2_DATA, 0xFF);
 }
 
 void init_idt(void) {

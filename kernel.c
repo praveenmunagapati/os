@@ -1,168 +1,188 @@
-/*
- * kernel.c - Hello World x86_64 Kernel
- *
- * Writes directly to the VGA text buffer at 0xB8000.
- * Each character cell is 2 bytes: [ASCII char][attribute byte]
- *
- * No standard library headers — fully freestanding.
- */
-
 #include <stdint.h>
 #include <stddef.h>
 #include "idt.h"
+#include "serial.h"
+#include "limine.h"
+#include "font.h" /* font8x8_basic array */
 
-/* VGA text mode constants */
-#define VGA_BUFFER ((volatile uint16_t *)0xB8000)
-#define VGA_WIDTH 80
-#define VGA_HEIGHT 25
-
-/* VGA color codes */
-enum vga_color {
-  VGA_BLACK = 0,
-  VGA_BLUE = 1,
-  VGA_GREEN = 2,
-  VGA_CYAN = 3,
-  VGA_RED = 4,
-  VGA_MAGENTA = 5,
-  VGA_BROWN = 6,
-  VGA_LIGHT_GRAY = 7,
-  VGA_DARK_GRAY = 8,
-  VGA_LIGHT_BLUE = 9,
-  VGA_LIGHT_GREEN = 10,
-  VGA_LIGHT_CYAN = 11,
-  VGA_LIGHT_RED = 12,
-  VGA_LIGHT_MAGENTA = 13,
-  VGA_YELLOW = 14,
-  VGA_WHITE = 15,
+/* Request a framebuffer from Limine */
+__attribute__((used, section(".requests")))
+static volatile struct limine_framebuffer_request framebuffer_request = {
+    .id = LIMINE_FRAMEBUFFER_REQUEST,
+    .revision = 0
 };
 
-/* Build a VGA attribute byte from foreground and background colors */
-static inline uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg) {
-  return (uint8_t)(fg | (bg << 4));
+static struct limine_framebuffer *fb = NULL;
+
+static size_t term_x = 0;
+static size_t term_y = 0;
+static uint32_t term_color = 0xFFFFFFFF; // White
+
+static void draw_pixel(size_t x, size_t y, uint32_t color) {
+    if (!fb || x >= fb->width || y >= fb->height) return;
+    uint32_t *fb_ptr = fb->address;
+    fb_ptr[y * (fb->pitch / 4) + x] = color;
 }
 
-/* Build a full VGA character entry */
-static inline uint16_t vga_entry(unsigned char c, uint8_t color) {
-  return (uint16_t)c | ((uint16_t)color << 8);
-}
-
-/* Simple terminal state */
-static size_t term_row;
-static size_t term_col;
-static uint8_t term_color;
-
-/* Clear the entire screen */
-static void term_clear(void) {
-  size_t y, x;
-  for (y = 0; y < VGA_HEIGHT; y++) {
-    for (x = 0; x < VGA_WIDTH; x++) {
-      VGA_BUFFER[y * VGA_WIDTH + x] = vga_entry(' ', term_color);
+static void draw_char(char c, size_t x, size_t y, uint32_t fg, uint32_t bg) {
+    if (c < 0 || c > 127) c = '?';
+    char *bitmap = font8x8_basic[(int)c];
+    for (int r = 0; r < 8; r++) {
+        for (int c_bit = 0; c_bit < 8; c_bit++) {
+            if ((bitmap[r] >> c_bit) & 1) {
+                draw_pixel(x + c_bit, y + r, fg);
+            } else {
+                draw_pixel(x + c_bit, y + r, bg);
+            }
+        }
     }
-  }
-  term_row = 0;
-  term_col = 0;
 }
 
-#include "serial.h"
+/* Scroll the framebuffer up by 8 pixels */
+static void scroll(void) {
+    if (!fb) return;
+    uint32_t *fb_ptr = fb->address;
+    size_t pitch = fb->pitch / 4;
+    
+    /* Move pixels up by 8 rows */
+    for (size_t y = 8; y < fb->height; y++) {
+        for (size_t x = 0; x < fb->width; x++) {
+            fb_ptr[(y - 8) * pitch + x] = fb_ptr[y * pitch + x];
+        }
+    }
+    /* Clear the last 8 rows */
+    for (size_t y = fb->height - 8; y < fb->height; y++) {
+        for (size_t x = 0; x < fb->width; x++) {
+            fb_ptr[y * pitch + x] = 0x00000000;
+        }
+    }
+    term_y -= 8;
+}
 
-/* Write a single character */
 void term_putchar(char c) {
-  if (c == '\b') {
-      if (term_col > 0) {
-          term_col--;
-      } else if (term_row > 0) {
-          term_row--;
-          term_col = VGA_WIDTH - 1;
-      }
-      VGA_BUFFER[term_row * VGA_WIDTH + term_col] = vga_entry(' ', term_color);
-      return;
-  }
-  
-  if (c == '\n') {
-    term_col = 0;
-    term_row++;
-  } else {
-    VGA_BUFFER[term_row * VGA_WIDTH + term_col] = vga_entry(c, term_color);
-    term_col++;
-    if (term_col >= VGA_WIDTH) {
-      term_col = 0;
-      term_row++;
+    if (!fb) return;
+    
+    if (c == '\b') {
+        if (term_x >= 8) {
+            term_x -= 8;
+        } else if (term_y >= 8) {
+            term_y -= 8;
+            term_x = (fb->width / 8) * 8 - 8;
+        }
+        draw_char(' ', term_x, term_y, 0, 0);
+        return;
     }
-  }
-  
-  if (term_row >= VGA_HEIGHT) {
-      /* Scroll up */
-      for (size_t y = 1; y < VGA_HEIGHT; y++) {
-          for (size_t x = 0; x < VGA_WIDTH; x++) {
-              VGA_BUFFER[(y - 1) * VGA_WIDTH + x] = VGA_BUFFER[y * VGA_WIDTH + x];
-          }
-      }
-      /* Clear last line */
-      for (size_t x = 0; x < VGA_WIDTH; x++) {
-          VGA_BUFFER[(VGA_HEIGHT - 1) * VGA_WIDTH + x] = vga_entry(' ', term_color);
-      }
-      term_row = VGA_HEIGHT - 1;
-  }
-}
-/* Write a null-terminated string */
-static void term_puts(const char *str) {
-  while (*str) {
-    term_putchar(*str++);
-  }
+    
+    if (c == '\n') {
+        term_x = 0;
+        term_y += 8;
+    } else {
+        draw_char(c, term_x, term_y, term_color, 0x00000000);
+        term_x += 8;
+        if (term_x >= fb->width) {
+            term_x = 0;
+            term_y += 8;
+        }
+    }
+    
+    if (term_y >= fb->height) {
+        scroll();
+    }
 }
 
-/* Change the current text color */
-static void term_set_color(enum vga_color fg, enum vga_color bg) {
-  term_color = vga_entry_color(fg, bg);
+void term_puts(const char *str) {
+    while (*str) {
+        term_putchar(*str++);
+    }
 }
 
-/* =========================================================================
- * Kernel Entry Point
- * ========================================================================= */
+void print_hex(uint32_t val) {
+    char buf[9];
+    buf[8] = '\0';
+    for (int i = 7; i >= 0; i--) {
+        uint8_t nibble = val & 0xF;
+        if (nibble < 10) buf[i] = '0' + nibble;
+        else buf[i] = 'A' + (nibble - 10);
+        val >>= 4;
+    }
+    term_puts(buf);
+}
+
+extern void pci_scan(void);
+
+#include "keyboard.h"
+
+int strcmp(const char *s1, const char *s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
+}
+
+static void term_clear(void) {
+    if (!fb) return;
+    for (size_t y = 0; y < fb->height; y++) {
+        for (size_t x = 0; x < fb->width; x++) {
+            draw_pixel(x, y, 0x00000000);
+        }
+    }
+    term_x = 0;
+    term_y = 0;
+}
+
 void kmain(void) {
-  init_serial();
+    init_serial();
+    init_idt();
+    
+    if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1) {
+        for (;;) { __asm__ volatile ("hlt"); }
+    }
+    
+    fb = framebuffer_request.response->framebuffers[0];
+    term_clear();
+    
+    term_color = 0xFF00FF00;
+    __asm__ volatile ("sti");
 
-  /* Initialize terminal */
-  term_color = vga_entry_color(VGA_LIGHT_GREEN, VGA_BLACK);
-  term_clear();
+    term_puts("==================================================================\n");
+    term_puts("                   Welcome to MyOS x86_64 Kernel!                 \n");
+    term_puts("==================================================================\n\n");
+    
+    term_color = 0xFFFFFF00;
+    pci_scan();
+    term_puts("\n");
 
-  /* Initialize Interrupts & PS/2 Keyboard */
-  init_idt();
-  __asm__ volatile ("sti");
-
-  /* Print a banner */
-  term_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
-  term_puts("=================================================================="
-            "==============\n");
-
-  term_set_color(VGA_WHITE, VGA_BLACK);
-  term_puts("                        Welcome to ");
-  term_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-  term_puts("MyOS");
-  term_set_color(VGA_WHITE, VGA_BLACK);
-  term_puts(" x86_64 Kernel!\n");
-
-  term_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
-  term_puts("=================================================================="
-            "==============\n");
-
-  term_puts("\n");
-
-  term_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-  term_puts("  >> ");
-  term_set_color(VGA_WHITE, VGA_BLACK);
-  term_puts("Hello, OS! \n\n");
-
-  term_set_color(VGA_LIGHT_GRAY, VGA_BLACK);
-  term_puts("  Kernel loaded via Multiboot2\n");
-  term_puts("  VGA text mode: 80x25\n");
-  term_puts("  Identity-mapped first 1GB of RAM\n\n");
-
-  term_set_color(VGA_DARK_GRAY, VGA_BLACK);
-  term_puts("  System halted. Nothing more to do.\n");
-
-  /* Halt the CPU */
-  while (1) {
-    __asm__ volatile("hlt");
-  }
+    while (1) {
+        term_color = 0xFFFF5555; /* Light Red */
+        term_puts("root@MyOS# ");
+        term_color = 0xFFFFFFFF; /* White */
+        
+        while (!kbd_enter_pressed) {
+            __asm__ volatile ("hlt");
+        }
+        
+        /* Process command */
+        kbd_enter_pressed = 0;
+        
+        if (kbd_buffer[0] == '\0') {
+            continue;
+        }
+        
+        if (strcmp(kbd_buffer, "help") == 0) {
+            term_puts("Available commands:\n");
+            term_puts("  help  - Show this message\n");
+            term_puts("  clear - Clear the screen\n");
+            term_puts("  lspci - Scan and list PCI devices\n");
+        } else if (strcmp(kbd_buffer, "clear") == 0) {
+            term_clear();
+        } else if (strcmp(kbd_buffer, "lspci") == 0) {
+            term_color = 0xFFFFFF00;
+            pci_scan();
+        } else {
+            term_puts("Command not found: ");
+            term_puts(kbd_buffer);
+            term_puts("\n");
+        }
+    }
 }

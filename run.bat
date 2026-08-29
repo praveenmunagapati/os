@@ -2,7 +2,7 @@
 setlocal
 
 set TOOLS_DIR=%~dp0tools
-set KERNEL=%~dp0build\kernel.bin
+set ISO=%~dp0MyOS.iso
 
 :: Search for QEMU inside tools\qemu (it might be in a subfolder)
 for /f "delims=" %%i in ('dir /s /b "%TOOLS_DIR%\qemu\qemu-system-x86_64.exe" 2^>nul') do set QEMU=%%i
@@ -12,10 +12,10 @@ if "%QEMU%"=="" (
     exit /b 1
 )
 
-if not exist "%KERNEL%" (
-    echo Kernel binary not found! Please run build.bat first.
+if not exist "%ISO%" (
+    echo ISO not found! Please run iso.bat first.
     exit /b 1
 )
 
 echo Starting QEMU...
-"%QEMU%" -kernel "%KERNEL%" -serial stdio -no-reboot
+"%QEMU%" -cdrom "%ISO%" -serial stdio -no-reboot -device qemu-xhci -d int -D qemu.log

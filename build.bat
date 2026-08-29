@@ -12,6 +12,7 @@ set BOOT_OBJ=%BUILD_DIR%\boot.o
 set KERNEL_OBJ=%BUILD_DIR%\kernel.o
 set IDT_OBJ=%BUILD_DIR%\idt.o
 set KEYBOARD_OBJ=%BUILD_DIR%\keyboard.o
+set PCI_OBJ=%BUILD_DIR%\pci.o
 set KERNEL_ELF=%BUILD_DIR%\kernel.elf
 set KERNEL_BIN=%BUILD_DIR%\kernel.bin
 
@@ -33,17 +34,14 @@ echo [1/4] Assembling bootloader...
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo [2/4] Compiling C source files...
-"%CLANG%" -target x86_64-pc-none-elf -mno-red-zone -ffreestanding -c kernel.c -o "%KERNEL_OBJ%"
-"%CLANG%" -target x86_64-pc-none-elf -mno-red-zone -ffreestanding -c idt.c -o "%IDT_OBJ%"
-"%CLANG%" -target x86_64-pc-none-elf -mno-red-zone -ffreestanding -c keyboard.c -o "%KEYBOARD_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c kernel.c -o "%KERNEL_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c idt.c -o "%IDT_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c keyboard.c -o "%KEYBOARD_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c pci.c -o "%PCI_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo [3/4] Linking...
-"%LLD%" -m elf_x86_64 -T linker.ld -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%" "%IDT_OBJ%" "%KEYBOARD_OBJ%"
+"%LLD%" -m elf_x86_64 -T linker.ld -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%" "%IDT_OBJ%" "%KEYBOARD_OBJ%" "%PCI_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
-echo [4/4] Generating flat binary...
-"%OBJCOPY%" -O binary "%KERNEL_ELF%" "%KERNEL_BIN%"
-if %ERRORLEVEL% neq 0 exit /b 1
-
-echo Build successful: %KERNEL_BIN%
+echo Build successful: %KERNEL_ELF%

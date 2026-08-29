@@ -7,7 +7,7 @@ set LIMINE_DIR=%TOOLS_DIR%\limine
 set BUILD_DIR=%~dp0build
 set ISO_ROOT=%BUILD_DIR%\iso_root
 set ISO_FILE=%~dp0MyOS.iso
-set KERNEL=%BUILD_DIR%\kernel.bin
+set KERNEL=%BUILD_DIR%\kernel.elf
 
 if not exist "%XORRISO%" (
     echo xorriso not found! Please run setup.ps1 first.
