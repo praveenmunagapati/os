@@ -295,7 +295,7 @@ msg_welcome: db "Welcome to ", 0
 msg_myos:    db "MyOS", 0
 msg_kernel:  db " x86_64 Kernel!", 0
 msg_arrow:   db "  >> ", 0
-msg_hello:   db "Hello, World from Long Mode (64-bit)!", 0
+msg_hello:   db "Hello, World! ", 0
 msg_info1:   db "  Kernel loaded via Multiboot1 flat binary (AOUT kludge)", 0
 msg_info2:   db "  VGA text mode: 80x25", 0
 msg_info3:   db "  Identity-mapped first 1GB of RAM", 0
