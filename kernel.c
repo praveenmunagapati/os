@@ -7,8 +7,9 @@
  * No standard library headers — fully freestanding.
  */
 
-#include <stddef.h>
 #include <stdint.h>
+#include <stddef.h>
+#include "idt.h"
 
 /* VGA text mode constants */
 #define VGA_BUFFER ((volatile uint16_t *)0xB8000)
@@ -65,29 +66,44 @@ static void term_clear(void) {
 #include "serial.h"
 
 /* Write a single character */
-static void term_putchar(char c) {
-  write_serial(c);
-  if (c == '\n') {
-
-    term_col = 0;
-    term_row++;
-    if (term_row >= VGA_HEIGHT) {
-      term_row = 0;
-    }
-    return;
+void term_putchar(char c) {
+  if (c == '\b') {
+      if (term_col > 0) {
+          term_col--;
+      } else if (term_row > 0) {
+          term_row--;
+          term_col = VGA_WIDTH - 1;
+      }
+      VGA_BUFFER[term_row * VGA_WIDTH + term_col] = vga_entry(' ', term_color);
+      return;
   }
-  VGA_BUFFER[term_row * VGA_WIDTH + term_col] =
-      vga_entry((unsigned char)c, term_color);
-  term_col++;
-  if (term_col >= VGA_WIDTH) {
+  
+  if (c == '\n') {
     term_col = 0;
     term_row++;
-    if (term_row >= VGA_HEIGHT) {
-      term_row = 0;
+  } else {
+    VGA_BUFFER[term_row * VGA_WIDTH + term_col] = vga_entry(c, term_color);
+    term_col++;
+    if (term_col >= VGA_WIDTH) {
+      term_col = 0;
+      term_row++;
     }
+  }
+  
+  if (term_row >= VGA_HEIGHT) {
+      /* Scroll up */
+      for (size_t y = 1; y < VGA_HEIGHT; y++) {
+          for (size_t x = 0; x < VGA_WIDTH; x++) {
+              VGA_BUFFER[(y - 1) * VGA_WIDTH + x] = VGA_BUFFER[y * VGA_WIDTH + x];
+          }
+      }
+      /* Clear last line */
+      for (size_t x = 0; x < VGA_WIDTH; x++) {
+          VGA_BUFFER[(VGA_HEIGHT - 1) * VGA_WIDTH + x] = vga_entry(' ', term_color);
+      }
+      term_row = VGA_HEIGHT - 1;
   }
 }
-
 /* Write a null-terminated string */
 static void term_puts(const char *str) {
   while (*str) {
@@ -109,6 +125,10 @@ void kmain(void) {
   /* Initialize terminal */
   term_color = vga_entry_color(VGA_LIGHT_GREEN, VGA_BLACK);
   term_clear();
+
+  /* Initialize Interrupts & PS/2 Keyboard */
+  init_idt();
+  __asm__ volatile ("sti");
 
   /* Print a banner */
   term_set_color(VGA_LIGHT_CYAN, VGA_BLACK);

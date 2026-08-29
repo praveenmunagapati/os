@@ -10,6 +10,8 @@ set OBJCOPY=%TOOLS_DIR%\llvm\bin\llvm-objcopy.exe
 set BUILD_DIR=%~dp0build
 set BOOT_OBJ=%BUILD_DIR%\boot.o
 set KERNEL_OBJ=%BUILD_DIR%\kernel.o
+set IDT_OBJ=%BUILD_DIR%\idt.o
+set KEYBOARD_OBJ=%BUILD_DIR%\keyboard.o
 set KERNEL_ELF=%BUILD_DIR%\kernel.elf
 set KERNEL_BIN=%BUILD_DIR%\kernel.bin
 
@@ -30,12 +32,14 @@ echo [1/4] Assembling bootloader...
 "%NASM%" -f elf64 boot.asm -o "%BOOT_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
-echo [2/4] Compiling kernel.c...
+echo [2/4] Compiling C source files...
 "%CLANG%" -target x86_64-pc-none-elf -mno-red-zone -ffreestanding -c kernel.c -o "%KERNEL_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mno-red-zone -ffreestanding -c idt.c -o "%IDT_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mno-red-zone -ffreestanding -c keyboard.c -o "%KEYBOARD_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo [3/4] Linking...
-"%LLD%" -m elf_x86_64 -T linker.ld -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%"
+"%LLD%" -m elf_x86_64 -T linker.ld -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%" "%IDT_OBJ%" "%KEYBOARD_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo [4/4] Generating flat binary...
