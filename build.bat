@@ -30,18 +30,18 @@ if not exist "%BUILD_DIR%" (
 )
 
 echo [1/4] Assembling bootloader...
-"%NASM%" -f elf64 boot.asm -o "%BOOT_OBJ%"
+"%NASM%" -f elf64 "%~dp0src\arch\x86_64\boot.asm" -o "%BOOT_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo [2/4] Compiling C source files...
-"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c kernel.c -o "%KERNEL_OBJ%"
-"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c idt.c -o "%IDT_OBJ%"
-"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c keyboard.c -o "%KEYBOARD_OBJ%"
-"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -c pci.c -o "%PCI_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\kernel\kernel.c" -o "%KERNEL_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\arch\x86_64\idt.c" -o "%IDT_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\drivers\keyboard.c" -o "%KEYBOARD_OBJ%"
+"%CLANG%" -target x86_64-pc-none-elf -mcmodel=kernel -mno-red-zone -ffreestanding -I "%~dp0src\include" -c "%~dp0src\drivers\pci.c" -o "%PCI_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo [3/4] Linking...
-"%LLD%" -m elf_x86_64 -T linker.ld -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%" "%IDT_OBJ%" "%KEYBOARD_OBJ%" "%PCI_OBJ%"
+"%LLD%" -m elf_x86_64 -T "%~dp0src\arch\x86_64\linker.ld" -o "%KERNEL_ELF%" "%BOOT_OBJ%" "%KERNEL_OBJ%" "%IDT_OBJ%" "%KEYBOARD_OBJ%" "%PCI_OBJ%"
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo Build successful: %KERNEL_ELF%
