@@ -68,4 +68,35 @@ if (-not (Test-Path "$LlvmDir\bin\clang.exe")) {
     Write-Host "LLVM is already installed."
 }
 
-Write-Host "`nSetup complete! You can now use build.bat and run.bat."
+# --- Download and extract xorriso (for ISO creation) ---
+$XorrisoDir = "$ToolsDir\xorriso"
+if (-not (Test-Path "$XorrisoDir\xorriso.exe")) {
+    Write-Host "Downloading xorriso..."
+    $XorrisoZip = "$ToolsDir\xorriso.zip"
+    Invoke-WebRequest -Uri "https://github.com/dEajL3kA/xorriso-win32/releases/download/2026-02-25/xorriso-win32.2026-02-25.zip" -OutFile $XorrisoZip
+    Write-Host "Extracting xorriso..."
+    Expand-Archive -Path $XorrisoZip -DestinationPath "$ToolsDir\xorriso_temp" -Force
+    if (-not (Test-Path $XorrisoDir)) { New-Item -ItemType Directory -Path $XorrisoDir | Out-Null }
+    Move-Item -Path "$ToolsDir\xorriso_temp\*" -Destination $XorrisoDir -Force
+    Remove-Item -Path "$ToolsDir\xorriso_temp" -Recurse -Force
+    Remove-Item -Path $XorrisoZip -Force
+    Write-Host "xorriso installed successfully."
+} else { Write-Host "xorriso is already installed." }
+
+# --- Download and extract Limine (Bootloader for ISO) ---
+$LimineDir = "$ToolsDir\limine"
+if (-not (Test-Path "$LimineDir\limine-bios-cd.bin")) {
+    Write-Host "Downloading Limine..."
+    $LimineZip = "$ToolsDir\limine.zip"
+    $LimineUrl = (Invoke-RestMethod -Uri "https://api.github.com/repos/limine-bootloader/limine/releases/latest").assets | Where-Object { $_.name -eq "limine-binary.zip" } | Select-Object -First 1 -ExpandProperty browser_download_url
+    Invoke-WebRequest -Uri $LimineUrl -OutFile $LimineZip
+    Write-Host "Extracting Limine..."
+    Expand-Archive -Path $LimineZip -DestinationPath "$ToolsDir\limine_temp" -Force
+    if (-not (Test-Path $LimineDir)) { New-Item -ItemType Directory -Path $LimineDir | Out-Null }
+    Move-Item -Path "$ToolsDir\limine_temp\limine-binary\*" -Destination $LimineDir -Force
+    Remove-Item -Path "$ToolsDir\limine_temp" -Recurse -Force
+    Remove-Item -Path $LimineZip -Force
+    Write-Host "Limine installed successfully."
+} else { Write-Host "Limine is already installed." }
+
+Write-Host "`nSetup complete! You can now use build.bat, run.bat, and iso.bat."

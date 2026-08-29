@@ -83,8 +83,8 @@ check_cpuid:
     je .no_cpuid
     ret
 .no_cpuid:
-    hlt
-    jmp $
+    mov al, 'C'
+    jmp print_error
 
 check_long_mode:
     mov eax, 0x80000000
@@ -96,9 +96,21 @@ check_long_mode:
     test edx, (1 << 29)
     jz .no_long_mode
     ret
+
 .no_long_mode:
+    mov al, 'L'
+    jmp print_error
+
+print_error:
+    ; Print 'E', 'R', 'R', ':', ' ', and the error code in 'al'
+    mov dword [0xB8000], 0x4F524F45 ; "ER" on red background
+    mov dword [0xB8004], 0x4F3A4F52 ; "R:" on red background
+    mov dword [0xB8008], 0x4F204F20 ; "  " on red background
+    mov ah, 0x4F
+    mov word [0xB800A], ax          ; The error char
+.hang:
     hlt
-    jmp $
+    jmp .hang
 
 setup_paging:
     mov edi, pml4_table
