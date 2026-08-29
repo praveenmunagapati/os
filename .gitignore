@@ -1,0 +1,20 @@
+# Build artifacts
+/build/
+*.bin
+*.elf
+*.o
+
+# Downloaded tools
+/tools/
+*.zip
+
+# Logs
+*.log
+*.err
+*.out
+
+# Windows/IDE Specific
+.vscode/
+.idea/
+*.suo
+*.user

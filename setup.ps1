@@ -46,4 +46,26 @@ if (-not (Test-Path "$QemuDir\qemu-system-x86_64.exe")) {
     Write-Host "QEMU is already installed."
 }
 
+# --- Download and extract LLVM/Clang ---
+$LlvmDir = "$ToolsDir\llvm"
+if (-not (Test-Path "$LlvmDir\bin\clang.exe")) {
+    Write-Host "Downloading LLVM-MinGW Portable..."
+    $LlvmZip = "$ToolsDir\llvm.zip"
+    Invoke-WebRequest -Uri "https://github.com/mstorsjo/llvm-mingw/releases/download/20260826/llvm-mingw-20260826-msvcrt-x86_64.zip" -OutFile $LlvmZip
+    
+    Write-Host "Extracting LLVM..."
+    Expand-Archive -Path $LlvmZip -DestinationPath "$ToolsDir\llvm_temp" -Force
+    
+    if (-not (Test-Path $LlvmDir)) {
+        New-Item -ItemType Directory -Path $LlvmDir | Out-Null
+    }
+    
+    Move-Item -Path "$ToolsDir\llvm_temp\llvm-mingw-20260826-msvcrt-x86_64\*" -Destination $LlvmDir -Force
+    Remove-Item -Path "$ToolsDir\llvm_temp" -Recurse -Force
+    Remove-Item -Path $LlvmZip -Force
+    Write-Host "LLVM installed successfully."
+} else {
+    Write-Host "LLVM is already installed."
+}
+
 Write-Host "`nSetup complete! You can now use build.bat and run.bat."

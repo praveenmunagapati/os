@@ -1,39 +1,36 @@
-/* Linker Script for x86_64 kernel (32-bit ELF container) */
-
 ENTRY(_start)
-OUTPUT_FORMAT(elf32-i386)
+OUTPUT_FORMAT("elf64-x86-64")
 
 SECTIONS
 {
     . = 1M;
 
-    .multiboot : ALIGN(4)
+    /* The multiboot header must be near the beginning of the file */
+    .multiboot ALIGN(4K) :
     {
-        *(.multiboot)
+        KEEP(*(.multiboot))
     }
 
-    .text : ALIGN(4K)
+    .text ALIGN(4K) :
     {
         *(.text)
-        *(.text.*)
     }
 
-    .rodata : ALIGN(4K)
+    .rodata ALIGN(4K) :
     {
-        *(.rodata)
-        *(.rodata.*)
+        *(.rodata*)
     }
 
-    .data : ALIGN(4K)
+    .data ALIGN(4K) :
     {
         *(.data)
-        *(.data.*)
+        data_end = .;
     }
 
-    .bss : ALIGN(4K)
+    .bss ALIGN(4K) :
     {
         *(COMMON)
         *(.bss)
-        *(.bss.*)
+        bss_end = .;
     }
 }

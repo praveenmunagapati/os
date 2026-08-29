@@ -7,12 +7,8 @@
  * No standard library headers — fully freestanding.
  */
 
-/* Define our own integer types (no stdint.h in freestanding -nostdinc) */
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
-typedef unsigned long long uint64_t;
-typedef unsigned long long size_t;
+#include <stddef.h>
+#include <stdint.h>
 
 /* VGA text mode constants */
 #define VGA_BUFFER ((volatile uint16_t *)0xB8000)
@@ -66,9 +62,13 @@ static void term_clear(void) {
   term_col = 0;
 }
 
+#include "serial.h"
+
 /* Write a single character */
 static void term_putchar(char c) {
+  write_serial(c);
   if (c == '\n') {
+
     term_col = 0;
     term_row++;
     if (term_row >= VGA_HEIGHT) {
@@ -104,6 +104,8 @@ static void term_set_color(enum vga_color fg, enum vga_color bg) {
  * Kernel Entry Point
  * ========================================================================= */
 void kmain(void) {
+  init_serial();
+
   /* Initialize terminal */
   term_color = vga_entry_color(VGA_LIGHT_GREEN, VGA_BLACK);
   term_clear();
@@ -129,7 +131,7 @@ void kmain(void) {
   term_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
   term_puts("  >> ");
   term_set_color(VGA_WHITE, VGA_BLACK);
-  term_puts("Hello, World! \n\n");
+  term_puts("Hello, OS! \n\n");
 
   term_set_color(VGA_LIGHT_GRAY, VGA_BLACK);
   term_puts("  Kernel loaded via Multiboot2\n");

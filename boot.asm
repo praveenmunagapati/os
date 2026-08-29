@@ -1,11 +1,11 @@
 ; =============================================================================
-; boot.asm - Complete x86_64 Hello World Kernel
-; =============================================================================
-; Flat binary format (nasm -f bin) for QEMU multiboot loading using AOUT kludge.
+; boot.asm - Minimal Bootstub for x86_64 C Kernel
 ; =============================================================================
 
 global _start
-org 0x100000
+extern kmain
+extern data_end
+extern bss_end
 
 ; ---------- Multiboot1 Constants ----------
 MULTIBOOT_MAGIC     equ 0x1BADB002
@@ -19,10 +19,9 @@ MULTIBOOT_CHECKSUM  equ -(MULTIBOOT_MAGIC + MULTIBOOT_FLAGS)
 PAGE_PRESENT        equ (1 << 0)
 PAGE_WRITABLE       equ (1 << 1)
 PAGE_HUGE           equ (1 << 7)
-VGA_BUFFER          equ 0xB8000
-COM1_PORT           equ 0x3F8
 
-; ---------- Multiboot1 Header ----------
+; ---------- Multiboot Header ----------
+section .multiboot
 align 4
 mboot:
     dd MULTIBOOT_MAGIC
@@ -30,43 +29,17 @@ mboot:
     dd MULTIBOOT_CHECKSUM
     ; AOUT Kludge fields
     dd mboot            ; header_addr
-    dd $$               ; load_addr (start of file, which is org 0x100000)
-    dd bss_start        ; load_end_addr
+    dd 0x100000         ; load_addr (start of file, which is linked at 1MB)
+    dd 0                ; load_end_addr (0 means entire file)
     dd bss_end          ; bss_end_addr
     dd _start           ; entry_addr
 
 ; ---------- 32-bit Entry Point ----------
+section .text
 bits 32
 _start:
     cli
     mov esp, stack_top
-
-    ; Initialize serial port COM1 (0x3F8)
-    mov dx, 0x3F9 ; IER
-    mov al, 0x00
-    out dx, al
-    mov dx, 0x3FB ; LCR
-    mov al, 0x80
-    out dx, al
-    mov dx, 0x3F8 ; DLL
-    mov al, 0x03  ; 38400 baud
-    out dx, al
-    mov dx, 0x3F9 ; DLH
-    mov al, 0x00
-    out dx, al
-    mov dx, 0x3FB ; LCR
-    mov al, 0x03  ; 8-N-1
-    out dx, al
-    mov dx, 0x3FA ; FCR
-    mov al, 0xC7
-    out dx, al
-    mov dx, 0x3FC ; MCR
-    mov al, 0x0B
-    out dx, al
-
-    ; Print serial message
-    mov esi, msg_32bit
-    call serial_print_32
 
     call check_cpuid
     call check_long_mode
@@ -95,17 +68,6 @@ _start:
     lgdt [gdt64_pointer]
     jmp 0x08:long_mode_start
 
-serial_print_32:
-.loop:
-    lodsb
-    test al, al
-    jz .done
-    mov dx, 0x3F8
-    out dx, al
-    jmp .loop
-.done:
-    ret
-
 check_cpuid:
     pushfd
     pop eax
@@ -121,8 +83,8 @@ check_cpuid:
     je .no_cpuid
     ret
 .no_cpuid:
-    mov al, 'C'
-    jmp error
+    hlt
+    jmp $
 
 check_long_mode:
     mov eax, 0x80000000
@@ -135,8 +97,8 @@ check_long_mode:
     jz .no_long_mode
     ret
 .no_long_mode:
-    mov al, 'L'
-    jmp error
+    hlt
+    jmp $
 
 setup_paging:
     mov edi, pml4_table
@@ -165,14 +127,6 @@ setup_paging:
     jne .map_pd
     ret
 
-error:
-    mov dword [0xB8000], 0x4F524F45
-    mov dword [0xB8004], 0x4F3A4F52
-    mov dword [0xB8008], 0x4F204F20
-    mov byte  [0xB800A], al
-    hlt
-    jmp $
-
 ; ---------- 64-bit Long Mode ----------
 bits 64
 long_mode_start:
@@ -184,123 +138,15 @@ long_mode_start:
     mov ss, ax
     mov rsp, stack_top
 
-    ; Print serial message from 64-bit mode
-    mov rsi, msg_64bit
-    call serial_print_64
-
-    ; Clear screen
-    mov rdi, VGA_BUFFER
-    mov rcx, 80 * 25
-    mov ax, 0x0720
-    rep stosw
-
-    ; Banner row 0
-    mov rdi, VGA_BUFFER
-    mov ah, 0x0B
-    mov rcx, 80
-    mov al, '='
-.bar1:
-    stosw
-    loop .bar1
-
-    ; Row 1
-    mov rdi, VGA_BUFFER + (1 * 80 * 2)
-    mov ah, 0x0F
-    mov rcx, 14
-    mov al, ' '
-.spc1:
-    stosw
-    loop .spc1
-
-    mov rsi, msg_welcome
-    mov ah, 0x0F
-    call print_str64
-
-    mov rsi, msg_myos
-    mov ah, 0x0A
-    call print_str64
-
-    mov rsi, msg_kernel
-    mov ah, 0x0F
-    call print_str64
-
-    ; Row 2
-    mov rdi, VGA_BUFFER + (2 * 80 * 2)
-    mov ah, 0x0B
-    mov rcx, 80
-    mov al, '='
-.bar2:
-    stosw
-    loop .bar2
-
-    ; Row 4
-    mov rdi, VGA_BUFFER + (4 * 80 * 2)
-    mov rsi, msg_arrow
-    mov ah, 0x0A
-    call print_str64
-    mov rsi, msg_hello
-    mov ah, 0x0F
-    call print_str64
-
-    ; Info rows
-    mov rdi, VGA_BUFFER + (6 * 80 * 2)
-    mov rsi, msg_info1
-    mov ah, 0x07
-    call print_str64
-
-    mov rdi, VGA_BUFFER + (7 * 80 * 2)
-    mov rsi, msg_info2
-    mov ah, 0x07
-    call print_str64
-
-    mov rdi, VGA_BUFFER + (8 * 80 * 2)
-    mov rsi, msg_info3
-    mov ah, 0x07
-    call print_str64
-
-    mov rdi, VGA_BUFFER + (10 * 80 * 2)
-    mov rsi, msg_halt
-    mov ah, 0x08
-    call print_str64
-
+    ; Call our C kernel main function
+    call kmain
+    
 .hang:
     cli
     hlt
     jmp .hang
 
-print_str64:
-    lodsb
-    test al, al
-    jz .done
-    stosw
-    jmp print_str64
-.done:
-    ret
-
-serial_print_64:
-.loop:
-    lodsb
-    test al, al
-    jz .done2
-    mov dx, 0x3F8
-    out dx, al
-    jmp .loop
-.done2:
-    ret
-
-align 4
-msg_32bit:   db "[KERNEL] Booted into 32-bit protected mode.", 13, 10, 0
-msg_64bit:   db "[KERNEL] Transitioned to 64-bit long mode. Hello, World!", 13, 10, 0
-msg_welcome: db "Welcome to ", 0
-msg_myos:    db "MyOS", 0
-msg_kernel:  db " x86_64 Kernel!", 0
-msg_arrow:   db "  >> ", 0
-msg_hello:   db "Hello, World! ", 0
-msg_info1:   db "  Kernel loaded via Multiboot1 flat binary (AOUT kludge)", 0
-msg_info2:   db "  VGA text mode: 80x25", 0
-msg_info3:   db "  Identity-mapped first 1GB of RAM", 0
-msg_halt:    db "  System halted. Nothing more to do.", 0
-
+; ---------- GDT ----------
 align 16
 gdt64_start:
     dq 0
@@ -312,9 +158,9 @@ gdt64_pointer:
     dw gdt64_end - gdt64_start - 1
     dd gdt64_start
 
-; ---------- BSS (must be at the end) ----------
+; ---------- BSS ----------
+section .bss
 align 4096
-bss_start:
 pml4_table:
     resb 4096
 pdpt_table:
@@ -325,4 +171,3 @@ align 16
 stack_bottom:
     resb 16384
 stack_top:
-bss_end:
