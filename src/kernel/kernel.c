@@ -111,6 +111,7 @@ void print_hex(uint32_t val) {
 extern void pci_scan(void);
 
 #include "keyboard.h"
+#include "pmm.h"
 
 int strcmp(const char *s1, const char *s2) {
     while (*s1 && (*s1 == *s2)) {
@@ -131,6 +132,22 @@ static void term_clear(void) {
     term_y = 0;
 }
 
+static void print_num(uint64_t val) {
+    if (val == 0) {
+        term_putchar('0');
+        return;
+    }
+    char buf[32];
+    int i = 0;
+    while (val > 0) {
+        buf[i++] = '0' + (val % 10);
+        val /= 10;
+    }
+    while (i > 0) {
+        term_putchar(buf[--i]);
+    }
+}
+
 void kmain(void) {
     init_serial();
     init_idt();
@@ -144,6 +161,9 @@ void kmain(void) {
     
     term_color = 0xFF00FF00;
     __asm__ volatile ("sti");
+
+    /* Initialize Memory */
+    pmm_init();
 
     term_puts("==================================================================\n");
     term_puts("                   Welcome to MyOS x86_64 Kernel!                 \n");
@@ -174,11 +194,17 @@ void kmain(void) {
             term_puts("  help  - Show this message\n");
             term_puts("  clear - Clear the screen\n");
             term_puts("  lspci - Scan and list PCI devices\n");
+            term_puts("  free  - Show physical memory usage\n");
         } else if (strcmp(kbd_buffer, "clear") == 0) {
             term_clear();
         } else if (strcmp(kbd_buffer, "lspci") == 0) {
             term_color = 0xFFFFFF00;
             pci_scan();
+        } else if (strcmp(kbd_buffer, "free") == 0) {
+            term_color = 0xFF00FFFF; /* Cyan */
+            term_puts("Total Memory: "); print_num(pmm_total_memory / (1024*1024)); term_puts(" MB\n");
+            term_puts("Used Memory:  "); print_num(pmm_used_memory / (1024*1024)); term_puts(" MB\n");
+            term_puts("Free Memory:  "); print_num(pmm_free_memory / (1024*1024)); term_puts(" MB\n");
         } else {
             term_puts("Command not found: ");
             term_puts(kbd_buffer);
